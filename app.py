@@ -14,19 +14,23 @@ app = Flask(__name__)
 nltk.download("stopwords")
 nltk.download("wordnet")
 
-# Load the saved models
+print("🔄 Loading models and tokenizer...")
+
+# Load models
 cnn_model = load_model("cnn_model.keras")
 lstm_model = load_model("lstm_model.keras")
 rnn_model = load_model("rnn_model.keras")
 meta_model = load_model("meta_model.keras")
 
-# Load the tokenizer
+# Load tokenizer
 with open("tokenizer.pkl", "rb") as f:
     tokenizer = pickle.load(f)
 
-# Load the label encoder
+# Load label encoder
 with open("label_encoder.pkl", "rb") as f:
     label_encoder = pickle.load(f)
+
+print("✅ Models and tokenizer loaded.")
 
 # ---------------- Preprocessing ----------------
 
@@ -43,16 +47,16 @@ def clean_text(text):
 # ---------------- Prediction Function ----------------
 
 def predict_category(headline):
-    headline = clean_text(headline)
-    sequence = tokenizer.texts_to_sequences([headline])
+    cleaned = clean_text(headline)
+    sequence = tokenizer.texts_to_sequences([cleaned])
     padded_sequence = pad_sequences(sequence, maxlen=200)
 
-    cnn_pred = cnn_model.predict(padded_sequence)
-    lstm_pred = lstm_model.predict(padded_sequence)
-    rnn_pred = rnn_model.predict(padded_sequence)
+    cnn_pred = cnn_model.predict(padded_sequence, verbose=0)
+    lstm_pred = lstm_model.predict(padded_sequence, verbose=0)
+    rnn_pred = rnn_model.predict(padded_sequence, verbose=0)
 
     stacked_pred = np.concatenate([cnn_pred, lstm_pred, rnn_pred], axis=1)
-    final_pred = meta_model.predict(stacked_pred)
+    final_pred = meta_model.predict(stacked_pred, verbose=0)
 
     predicted_class = label_encoder.inverse_transform([np.argmax(final_pred)])
     return predicted_class[0]
@@ -66,20 +70,25 @@ def home():
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
-        data = request.get_json()
+        data = request.get_json(force=True)  # Ensure JSON is parsed even without correct header
         if "headline" not in data:
             return jsonify({"error": "Missing 'headline' in request"}), 400
 
         headline = data["headline"]
+        print("📨 Received headline:", headline)
+
         category = predict_category(headline)
+        print("✅ Predicted category:", category)
 
         return jsonify({"category": category})
 
     except Exception as e:
+        print("❌ Error during prediction:", str(e))
         return jsonify({"error": str(e)}), 500
 
 # ---------------- Run App ----------------
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    print(f"🚀 Starting server on port {port}...")
     app.run(host="0.0.0.0", port=port)
